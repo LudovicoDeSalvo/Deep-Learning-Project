@@ -58,7 +58,10 @@ class GraphDataset(Dataset):
         return self.num_graphs  
     
     def get(self, idx):
-        return dictToGraphObject(self.graphs_dicts[idx])
+        data = dictToGraphObject(self.graphs_dicts[idx])
+        data.idx = idx  # ✅ This ensures every Data object has .idx for ELR/NCOD+
+        return data
+    
 
     def _count_graphs(self):
         if self.raw.endswith(".gz"):

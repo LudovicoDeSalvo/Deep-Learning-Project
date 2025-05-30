@@ -10,7 +10,7 @@ from torch.utils.data import random_split
 
 from src.loadData import GraphDataset
 from src.utils import set_seed
-from src.modelsASY import GNN
+from src.models import GNN
 from sklearn.metrics import f1_score
 
 import argparse

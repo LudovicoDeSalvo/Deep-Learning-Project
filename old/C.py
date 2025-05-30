@@ -6,11 +6,11 @@ import logging
 from tqdm import tqdm
 from torch_geometric.loader import DataLoader
 from torch.utils.data import random_split
-# Load utility functions from cloned repository
 
+# Load utility functions from cloned repository
 from src.loadData import GraphDataset
 from src.utils import set_seed
-from src.modelsASY import GNN
+from src.models import GNN
 from sklearn.metrics import f1_score
 
 import argparse
@@ -182,6 +182,8 @@ class SoftCoTeaching:
         if self.use_mixup and epoch == getattr(self, "mixup_start_epoch", 7):
             print(f"🔀 MixUp activated starting from epoch {epoch}")
 
+
+
         for data in data_loader:
             data = data.to(self.device)
 
@@ -319,8 +321,8 @@ class AdaptiveSoftCoTeaching(SoftCoTeaching):
 def train_with_soft_co_teaching(args, device, use_adaptive=False, checkpoint_path=None):
     """Main training function using soft co-teaching with early stopping"""
     model1, model2 = create_co_teaching_models(args, device)
-    optimizer1 = torch.optim.Adam(model1.parameters(), lr=0.001)
-    optimizer2 = torch.optim.Adam(model2.parameters(), lr=0.001)
+    optimizer1 = torch.optim.Adam(model1.parameters(), lr=0.001, weight_decay=1e-4)
+    optimizer2 = torch.optim.Adam(model2.parameters(), lr=0.001, weight_decay=1e-4)
     scheduler1 = CosineAnnealingLR(optimizer1, T_max=args.epochs, eta_min=1e-5)
     scheduler2 = CosineAnnealingLR(optimizer2, T_max=args.epochs, eta_min=1e-5)
 
@@ -329,9 +331,17 @@ def train_with_soft_co_teaching(args, device, use_adaptive=False, checkpoint_pat
     elif args.baseline_mode == 3:
         criterion = GeneralizedCrossEntropyLoss(q=0.7)
     elif args.baseline_mode == 4:
-        criterion = SymmetricCrossEntropyLoss(alpha=1.0, beta=1.0)
+        criterion = SymmetricCrossEntropyLoss(alpha=0.5, beta=2.0)
     elif args.baseline_mode == 5:
         criterion = NCODPlusLoss(num_classes=6, emb_dim=args.emb_dim)
+    elif args.baseline_mode == 6:
+        criterion = SymmetricNoiseCrossEntropyLoss(noise_prob=args.noise_prob, num_classes=6, temperature=1.0)
+    elif args.baseline_mode == 7:
+        # Define your class-specific asymmetric noise configuration here
+        asymmetric_noise_dict = {
+            (0, 1): 0.2, (2, 3): 0.4, (4, 5): 0.3  # Example: adjust for your task
+        }
+        criterion = AsymmetricNoiseCrossEntropyLoss(noise_probs_dict=asymmetric_noise_dict, num_classes=6, temperature=1.0)
     else:
         criterion = torch.nn.CrossEntropyLoss()
 
@@ -350,6 +360,8 @@ def train_with_soft_co_teaching(args, device, use_adaptive=False, checkpoint_pat
         use_mixup = True,
         mixup_start_epoch = 7
     )
+
+    current_criterion = criterion
     
 
     full_dataset = GraphDataset(args.train_path, transform=add_zeros)
@@ -366,6 +378,12 @@ def train_with_soft_co_teaching(args, device, use_adaptive=False, checkpoint_pat
     patience_counter = 0
 
     for epoch in range(args.epochs):
+
+        if epoch == 10:
+            print("🔄 Switching to NCODPlusLoss")
+            current_criterion = NCODPlusLoss(num_classes=6, emb_dim=args.emb_dim)
+            co_teacher.criterion = current_criterion
+
         loss1, loss2, acc1, acc2, avg_weight1, avg_weight2 = co_teacher.train_epoch(train_loader, epoch)
 
         val_loss1, val_acc1, val_preds1, val_labels1 = evaluate(val_loader, model1, device, calculate_accuracy=True)
@@ -379,6 +397,11 @@ def train_with_soft_co_teaching(args, device, use_adaptive=False, checkpoint_pat
 
         scheduler1.step()
         scheduler2.step()
+
+        if epoch == 0:
+            criterion.ema_momentum = 0.0 
+        elif epoch == 1:
+            criterion.ema_momentum = 0.9 
 
         print(f"\nEpoch {epoch + 1}/{args.epochs}")
         print(f"Learning Rates - Model1: {scheduler1.get_last_lr()[0]:.6f}, Model2: {scheduler2.get_last_lr()[0]:.6f}")
@@ -520,13 +543,17 @@ class NCODLoss(nn.Module):
         self.register_buffer("centroids", torch.zeros(num_classes, emb_dim))
         self.class_counts = torch.zeros(num_classes, dtype=torch.long)
         self.u = nn.Parameter(torch.ones(1))
+        self.ema_momentum = 0.9
 
     def update_centroids(self, embeddings, targets):
         for i in range(self.num_classes):
             mask = (targets == i)
             if mask.any():
-                self.centroids[i] = embeddings[mask].mean(dim=0).detach()
-                self.class_counts[i] = mask.sum().item()
+                class_mean = embeddings[mask].mean(dim=0).detach()
+                # Exponential Moving Average Update
+                self.centroids[i] = self.ema_momentum * self.centroids[i] + (1 - self.ema_momentum) * class_mean
+                self.class_counts[i] += mask.sum().item()
+
 
     def forward(self, embeddings, logits, targets):
         # Classification loss (CE)
@@ -636,6 +663,161 @@ def run_evaluation(data_loader, model, device, label_map=None, save_csv_path=Non
 
 
 
+class SymmetricNoiseCrossEntropyLoss(nn.Module):
+    """
+    Symmetric noise: flip probability is the same for all classes
+    P(observed_label = j | true_label = i) = noise_prob / (num_classes - 1) for i != j
+    P(observed_label = i | true_label = i) = 1 - noise_prob
+    """
+    def __init__(self, noise_prob, num_classes=6, temperature=1.0):
+        super().__init__()
+        self.noise_prob = noise_prob
+        self.num_classes = num_classes
+        self.temperature = temperature
+        self.ce = nn.CrossEntropyLoss(reduction='none')
+        
+        # Build noise transition matrix for symmetric noise
+        self.register_buffer('noise_matrix', self._build_symmetric_noise_matrix())
+        
+    def _build_symmetric_noise_matrix(self):
+        """Build symmetric noise transition matrix"""
+        matrix = torch.zeros(self.num_classes, self.num_classes)
+        
+        # Diagonal elements (correct label probability)
+        matrix.fill_diagonal_(1.0 - self.noise_prob)
+        
+        # Off-diagonal elements (uniform noise to other classes)
+        off_diag_prob = self.noise_prob / (self.num_classes - 1)
+        matrix = matrix + off_diag_prob
+        matrix.fill_diagonal_(1.0 - self.noise_prob)  # Restore diagonal
+        
+        return matrix
+    
+    def forward(self, logits, targets, epoch=0):
+        # Temperature scaling
+        logits = logits / self.temperature
+        
+        # Get probabilities
+        probs = F.softmax(logits, dim=1)
+        
+        # Calculate confidence-based weighting
+        confidence = torch.max(probs, dim=1)[0]
+        
+        # Standard CE loss
+        losses = self.ce(logits, targets)
+        
+        # Dynamic noise adaptation based on confidence and epoch
+        epoch_factor = min(1.0, epoch / 50.0)  # Gradually increase robustness
+        dynamic_noise_prob = self.noise_prob * (1 - 0.3 * confidence.detach() * epoch_factor)
+        
+        # Weight calculation for symmetric noise
+        # Use the noise matrix to get the probability of observing the target given true label
+        target_probs = self.noise_matrix[targets, targets]  # P(observed=target|true=target)
+        weights = target_probs + (1 - target_probs) * (1 - dynamic_noise_prob)
+        
+        return (losses * weights).mean()
+
+
+class AsymmetricNoiseCrossEntropyLoss(nn.Module):
+    """
+    Asymmetric noise: different flip probabilities for different class pairs
+    More realistic noise model where certain classes are more likely to be confused
+    """
+    def __init__(self, noise_probs_dict, num_classes=6, temperature=1.0):
+        super().__init__()
+        self.noise_probs_dict = noise_probs_dict  # e.g., {(0,1): 0.2, (2,3): 0.4}
+        self.num_classes = num_classes
+        self.temperature = temperature
+        self.ce = nn.CrossEntropyLoss(reduction='none')
+        
+        # Build noise transition matrix for asymmetric noise
+        self.register_buffer('noise_matrix', self._build_asymmetric_noise_matrix())
+        
+    def _build_asymmetric_noise_matrix(self):
+        """Build asymmetric noise transition matrix"""
+        matrix = torch.eye(self.num_classes)  # Start with identity
+        
+        # Apply specific noise probabilities
+        for (from_class, to_class), prob in self.noise_probs_dict.items():
+            if from_class != to_class:
+                matrix[from_class, to_class] = prob
+                matrix[from_class, from_class] -= prob  # Ensure rows sum to 1
+        
+        # Ensure no negative probabilities
+        matrix = torch.clamp(matrix, min=0.0)
+        
+        # Renormalize rows to sum to 1
+        row_sums = matrix.sum(dim=1, keepdim=True)
+        matrix = matrix / (row_sums + 1e-8)
+        
+        return matrix
+    
+    def forward(self, logits, targets, epoch=0):
+        # Temperature scaling
+        logits = logits / self.temperature
+        
+        # Get probabilities
+        probs = F.softmax(logits, dim=1)
+        
+        # Calculate confidence
+        confidence = torch.max(probs, dim=1)[0]
+        
+        # Standard CE loss
+        losses = self.ce(logits, targets)
+        
+        # Get noise probabilities for each sample based on their target class
+        noise_probs = []
+        for target in targets:
+            # Get the probability of noise for this class (1 - diagonal element)
+            class_noise_prob = 1.0 - self.noise_matrix[target, target].item()
+            noise_probs.append(class_noise_prob)
+        
+        noise_probs = torch.tensor(noise_probs, device=logits.device)
+        
+        # Dynamic adaptation based on confidence and epoch
+        epoch_factor = min(1.0, epoch / 50.0)
+        dynamic_noise_probs = noise_probs * (1 - 0.3 * confidence.detach() * epoch_factor)
+        
+        # Weight calculation for asymmetric noise
+        weights = (1 - dynamic_noise_probs) + dynamic_noise_probs * confidence.detach()
+        
+        return (losses * weights).mean()        
+
+# Updated ContinuousNodeEncoder with proper initialization
+class ContinuousNodeEncoder(nn.Module):
+    """Encoder for continuous node features instead of discrete embeddings"""
+    def __init__(self, input_dim, embedding_dim):
+        super().__init__()
+        self.linear = nn.Sequential(
+            nn.Linear(input_dim, embedding_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(embedding_dim // 2, embedding_dim)
+        )
+        self.embedding_dim = embedding_dim
+        
+        # Initialize weights properly
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+    
+    def forward(self, x):
+        # Ensure input is float
+        if x.dtype != torch.float32:
+            x = x.float()
+        return self.linear(x)
+    
+def add_enhanced_features(data):
+    # Dummy features: degree, clustering, centrality (example values)
+    deg = data.edge_index[0].bincount(minlength=data.num_nodes).float().unsqueeze(1)
+    clustering = torch.rand(data.num_nodes, 1)  # placeholder
+    centrality = torch.rand(data.num_nodes, 1)  # placeholder
+    data.x = torch.cat([deg, clustering, centrality], dim=1)
+    return data
+
+
 
 def main(args):
     # Get the directory where the main script is located
@@ -659,30 +841,58 @@ def main(args):
     checkpoints_folder = os.path.join(script_dir, "checkpoints", test_dir_name)
     os.makedirs(checkpoints_folder, exist_ok=True)
 
+    # Input feature dimension: 3 for add_enhanced_features, 2 for add_simple_degree_features
+    input_feature_dim = 3  # Change to 2 if using add_simple_degree_features
+
+  
+
     # Create model before loading weights
     if args.gnn == 'gin':
         model = GNN(gnn_type='gin', num_class=6, num_layer=args.num_layer,
-                    emb_dim=args.emb_dim, drop_ratio=args.drop_ratio, virtual_node=False).to(device)
+                    emb_dim=args.emb_dim, drop_ratio=args.drop_ratio, virtual_node=False)
     elif args.gnn == 'gin-virtual':
         model = GNN(gnn_type='gin', num_class=6, num_layer=args.num_layer,
-                    emb_dim=args.emb_dim, drop_ratio=args.drop_ratio, virtual_node=True).to(device)
+                    emb_dim=args.emb_dim, drop_ratio=args.drop_ratio, virtual_node=True)
     elif args.gnn == 'gcn':
         model = GNN(gnn_type='gcn', num_class=6, num_layer=args.num_layer,
-                    emb_dim=args.emb_dim, drop_ratio=args.drop_ratio, virtual_node=False).to(device)
+                    emb_dim=args.emb_dim, drop_ratio=args.drop_ratio, virtual_node=False)
     elif args.gnn == 'gcn-virtual':
         model = GNN(gnn_type='gcn', num_class=6, num_layer=args.num_layer,
-                    emb_dim=args.emb_dim, drop_ratio=args.drop_ratio, virtual_node=True).to(device)
+                    emb_dim=args.emb_dim, drop_ratio=args.drop_ratio, virtual_node=True)
     else:
         raise ValueError("Invalid GNN type")
+    
+
+  # Now replace the node encoder BEFORE moving to device
+    try:
+        # Get the embedding dimension from the original encoder
+        if hasattr(model.gnn_node, 'node_encoder'):
+            embedding_dim = model.gnn_node.node_encoder.embedding_dim
+            # Replace with continuous encoder
+            model.gnn_node.node_encoder = ContinuousNodeEncoder(input_feature_dim, embedding_dim)
+            print(f"Successfully replaced node encoder: {input_feature_dim} -> {embedding_dim}")
+        else:
+            print("Warning: Could not find node_encoder in model structure")
+            # Print model structure to debug
+            print("Model structure:")
+            print(model)
+    except Exception as e:
+        print(f"Error replacing node encoder: {e}")
+        print("Model structure:")
+        print(model)
+
+
+
+    model = model.to(device)
 
     # Load pre-trained model for inference
     if os.path.exists(checkpoint_path) and not args.train_path:
         checkpoint = torch.load(checkpoint_path, map_location=device)
-        model.load_state_dict(checkpoint['model_state_dict'])
+        model.load_state_dict(checkpoint['model_state_dict'], strict=False)
         print(f"Loaded best model from {checkpoint_path}")
 
     # Prepare test dataset and loader
-    test_dataset = GraphDataset(args.test_path, transform=add_zeros)
+    test_dataset = GraphDataset(args.test_path, transform=add_enhanced_features)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
 
     if hasattr(args, 'use_co_teaching') and args.use_co_teaching and args.train_path:
@@ -696,7 +906,7 @@ def main(args):
         raise RuntimeError("Model was not initialized. This usually means training did not occur.")
     else:
         checkpoint = torch.load(checkpoint_path, map_location=device)
-        model.load_state_dict(checkpoint['model_state_dict'])
+        model.load_state_dict(checkpoint['model_state_dict'], strict=False)
 
 
     # Evaluation on validation set (if available)
@@ -705,10 +915,12 @@ def main(args):
                     label_map=["class0", "class1", "class2", "class3", "class4", "class5"],
                     calculate_accuracy=True)
 
-    # Evaluation on test set (no labels, just predictions)
+    # Evaluation on test set (with report, if labels exist)
     run_evaluation(test_loader, model, device,
-                save_csv_path=os.path.join("submission", f"testset_{os.path.basename(os.path.dirname(args.test_path))}.csv"),
-               calculate_accuracy=False)
+        label_map=["class0", "class1", "class2", "class3", "class4", "class5"],
+        save_csv_path=os.path.join("submission", f"testset_{os.path.basename(os.path.dirname(args.test_path))}.csv"),
+        calculate_accuracy=True)
+
     
     if 'val_loader' in locals():
         del val_loader
@@ -722,15 +934,15 @@ def get_arguments():
     # Default argument values
     args['train_path'] = "datasets/A/0.2_train.json"
     args['test_path'] = "datasets/A/0.2_test.json"
-    args['num_checkpoints'] = 3
+    args['num_checkpoints'] = 5
     args['device'] = 0
     args['gnn'] = 'gcn-virtual'
     args['drop_ratio'] = 0.0
-    args['num_layer'] = 5
+    args['num_layer'] = 3
     args['emb_dim'] = 256
     args['batch_size'] = 32
     args['epochs'] = 200
-    args['baseline_mode'] = 5
+    args['baseline_mode'] = 4 #Switches to NCOD+ Loss after 10 epochs
     args['noise_prob'] = 0.2
     args['use_co_teaching'] = True
 
