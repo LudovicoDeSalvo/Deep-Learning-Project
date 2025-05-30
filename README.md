@@ -1,4 +1,4 @@
-# 🧠 Robust Graph Neural Networks with Noisy Labels
+# Robust Graph Neural Networks with Noisy Labels
 
 This repository implements a **robust graph classification pipeline** using **Graph Neural Networks (GNNs)**, tailored for learning under **noisy labels**. The system integrates advanced components such as:
 
@@ -28,7 +28,7 @@ This will automatically:
 - Use enhanced features and a continuous node encoder
 - Save checkpoints with early stopping on validation F1
 
-### 🔍 Inference Mode
+### Inference Mode
 
 To perform inference only (no training), simply set:
 
@@ -40,7 +40,7 @@ The script will then load the best model and evaluate on the test set.
 
 ---
 
-## 🗂️ File Structure
+## File Structure
 
 ```
 main.py               # Entry point (training & inference)
