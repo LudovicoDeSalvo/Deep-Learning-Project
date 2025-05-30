@@ -25,3 +25,5 @@ logs/C/training.log
 logs/C/plots/training_progress.png
 logs/D/training.log
 logs/D/plots/training_progress.png
+src/__pycache__/conv.cpython-310.pyc
+src/__pycache__/models.cpython-310.pyc

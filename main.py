@@ -29,7 +29,7 @@ import torch.nn as nn
 
 
 # Set the random seed
-set_seed()
+set_seed(42)
 
 
 def main(args):
@@ -156,18 +156,18 @@ def get_arguments():
     args = {}
 
     # Default argument values
-    args['train_path'] = "datasets/D/0.4_asy_train.json"
-    args['test_path'] = "datasets/D/0.4_asy_test.json"
+    args['train_path'] = "datasets/A/0.2_train.json"
+    args['test_path'] = "datasets/A/0.2_test.json"
     args['num_checkpoints'] = 5
     args['device'] = 0
     args['gnn'] = 'gine-virtual' #gin gin-virtual gcn gcn-virtual gine gine-virtual gine-virtualnode
-    args['drop_ratio'] = 0.0
+    args['drop_ratio'] = 0.1
     args['num_layer'] = 2
     args['emb_dim'] = 300   #300 to load base model
     args['batch_size'] = 32
     args['epochs'] = 200
     args['baseline_mode'] = 4 #starting loss
-    args['noise_prob'] = 0.4
+    args['noise_prob'] = 0.2
     args['use_co_teaching'] = True
     args['switch_epoch'] = 0    #Switches to NCOD+ after this number of epochs
     args['patience'] = 10   #Early Stopping Patience
