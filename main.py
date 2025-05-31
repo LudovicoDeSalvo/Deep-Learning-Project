@@ -148,7 +148,7 @@ def get_arguments():
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--epochs', type=int, default=200)
     parser.add_argument('--baseline_mode', type=int, default=4) #starting loss
-    parser.add_argument('--noise_prob', type=float, default=0.)
+    parser.add_argument('--noise_prob', type=float, default=0.4)
     parser.add_argument('--use_co_teaching', type=bool, default=True, help='Always use soft co-teaching')
     parser.add_argument('--switch_epoch', type=int, default=0) #Switches to NCOD+ after this number of epochs
     parser.add_argument('--patience', type=int, default=10) #Early Stopping Patience
