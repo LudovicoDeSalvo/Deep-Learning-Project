@@ -1,31 +1,19 @@
 import os
 import torch
-import pandas as pd
-import matplotlib.pyplot as plt
 import logging
-from tqdm import tqdm
 from torch_geometric.loader import DataLoader
-from torch.utils.data import random_split
 
 from encoder import ContinuousNodeEncoder
-from losses import SymmetricCrossEntropyLoss, NCODPlusLoss
-from util import evaluate, run_evaluation, add_zeros
+from util import run_evaluation, add_zeros
+from encoder import add_enhanced_features_fast, add_enhanced_features
 from coTeaching import train_with_soft_co_teaching
 
 from src.loadData import GraphDataset
 from src.utils import set_seed
-from src.models import GNN, GINEModelWithVirtualNode
+from src.models import GNN
 
 import argparse
-from sklearn.metrics import classification_report, confusion_matrix, f1_score
-import seaborn as sns
-import numpy as np
-
-import copy
-import shutil
 import gc
-import torch.nn.functional as F
-import torch.nn as nn
 
 
 # Set the random seed
@@ -55,22 +43,17 @@ def main(args):
     sample = GraphDataset(feature_probe_path, transform=transform)[0]
     input_feature_dim = sample.x.size(1)
 
-    # Initialize model
-    if args.gnn == 'gine-virtualnode':
-        model = GINEModelWithVirtualNode(num_features=input_feature_dim, num_classes=6,
-                                        num_layers=args.num_layer, emb_dim=args.emb_dim,
-                                        drop_ratio=args.drop_ratio).to(device)
-    else:
-        model = GNN(
-            gnn_type=args.gnn.replace('-virtual', ''),
-            num_class=6,
-            num_layer=args.num_layer,
-            emb_dim=args.emb_dim,
-            drop_ratio=args.drop_ratio,
-            virtual_node='virtual' in args.gnn,
-            input_dim=input_feature_dim,
-            residual=True
-        ).to(device)
+    # Initialize the model
+    model = GNN(
+        gnn_type=args.gnn.replace('-virtual', ''),
+        num_class=6,
+        num_layer=args.num_layer,
+        emb_dim=args.emb_dim,
+        drop_ratio=args.drop_ratio,
+        virtual_node='virtual' in args.gnn,
+        input_dim=input_feature_dim,
+        residual=True
+    ).to(device)
 
 
     # Replace node encoder before loading weights
@@ -125,7 +108,7 @@ def main(args):
         gc.collect()
 
     # Train model if training path is provided
-    if args.train_path and getattr(args, 'use_co_teaching', False):
+    if args.train_path is not None and getattr(args, 'use_co_teaching', False):
         model, val_loader = train_with_soft_co_teaching(args, device, use_adaptive=True, checkpoint_path=checkpoint_path)
 
     # Load best model after training
@@ -151,31 +134,28 @@ def main(args):
         gc.collect()
 
 
-
 def get_arguments():
-    args = {}
+    parser = argparse.ArgumentParser(description="Train or evaluate a GNN model.")
 
-    # Default argument values
-    args['train_path'] = "datasets/A/0.2_train.json"
-    args['test_path'] = "datasets/A/0.2_test.json"
-    args['num_checkpoints'] = 5
-    args['device'] = 0
-    args['gnn'] = 'gine-virtual' #gin gin-virtual gcn gcn-virtual gine gine-virtual gine-virtualnode
-    args['drop_ratio'] = 0.1
-    args['num_layer'] = 2
-    args['emb_dim'] = 300   #300 to load base model
-    args['batch_size'] = 32
-    args['epochs'] = 200
-    args['baseline_mode'] = 4 #starting loss
-    args['noise_prob'] = 0.2
-    args['use_co_teaching'] = True
-    args['switch_epoch'] = 0    #Switches to NCOD+ after this number of epochs
-    args['patience'] = 10   #Early Stopping Patience
-    args['start_from_base'] = True  #start from model trained on all datasets
-    args['start_mixup'] = 300
+    parser.add_argument('--train_path', type=str, default=None, help='Path to training dataset (set to None for inference only)')
+    parser.add_argument('--test_path', type=str, required=True, help='Path to test dataset')
+    parser.add_argument('--num_checkpoints', type=int, default=5)
+    parser.add_argument('--device', type=int, default=0)
+    parser.add_argument('--gnn', type=str, default='gine-virtual', choices=['gin', 'gin-virtual', 'gcn', 'gcn-virtual', 'gine', 'gine-virtual', 'gine-virtualnode'])
+    parser.add_argument('--drop_ratio', type=float, default=0.1)
+    parser.add_argument('--num_layer', type=int, default=2)
+    parser.add_argument('--emb_dim', type=int, default=300) #300 to load base model
+    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--epochs', type=int, default=200)
+    parser.add_argument('--baseline_mode', type=int, default=4) #starting loss
+    parser.add_argument('--noise_prob', type=float, default=0.)
+    parser.add_argument('--use_co_teaching', type=bool, default=True, help='Always use soft co-teaching')
+    parser.add_argument('--switch_epoch', type=int, default=0) #Switches to NCOD+ after this number of epochs
+    parser.add_argument('--patience', type=int, default=10) #Early Stopping Patience
+    parser.add_argument('--start_from_base', type=bool, default=True, help='Start from base pretrained model') #Start training from the model trained on all datasets
+    parser.add_argument('--start_mixup', type=int, default=300)
 
-    return argparse.Namespace(**args)
-
+    return parser.parse_args()
 
 
 if __name__ == "__main__":

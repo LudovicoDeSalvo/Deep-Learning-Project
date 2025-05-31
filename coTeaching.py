@@ -8,11 +8,11 @@ from sklearn.metrics import f1_score
 from torch.utils.data import random_split
 from torch_geometric.loader import DataLoader
 
-from encoder import ContinuousNodeEncoder, add_enhanced_features_fast
+from encoder import ContinuousNodeEncoder, add_enhanced_features_fast, add_enhanced_features
 from losses import SymmetricCrossEntropyLoss, NCODPlusLoss
 from util import evaluate, add_zeros
 from src.loadData import GraphDataset
-from src.models import GNN, GINEModelWithVirtualNode
+from src.models import GNN
 from src.utils import set_seed
 from torch.optim.lr_scheduler import CosineAnnealingLR
 
@@ -285,9 +285,8 @@ def train_with_soft_co_teaching(args, device, use_adaptive=False, checkpoint_pat
                 emb_dim = model.gnn_node.node_encoder.embedding_dim
                 model.gnn_node.node_encoder = ContinuousNodeEncoder(input_feature_dim, emb_dim)
                 print(f"✅ Replaced node_encoder for co-teaching model.gnn_node: {input_feature_dim} -> {emb_dim}")
-            elif hasattr(model, 'node_encoder'): # For GINEModelWithVirtualNode or similar
+            elif hasattr(model, 'node_encoder'):
                 emb_dim = model.node_encoder.embedding_dim if hasattr(model.node_encoder, 'embedding_dim') else args.emb_dim
-                # Get the device of the parent model
                 parent_model_device = next(model.parameters()).device
                 model.node_encoder = ContinuousNodeEncoder(input_feature_dim, emb_dim).to(parent_model_device)
                 print(f"✅ Replaced node_encoder for model: {input_feature_dim} -> {emb_dim} on device {parent_model_device}")
@@ -351,7 +350,6 @@ def train_with_soft_co_teaching(args, device, use_adaptive=False, checkpoint_pat
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
 
     best_val_f1 = 0.0
-    best_val_accuracy = 0.0
     patience = args.patience
     patience_counter = 0
 
@@ -463,12 +461,6 @@ def create_co_teaching_models(args, device, input_dim):
                      emb_dim=args.emb_dim, drop_ratio=args.drop_ratio,
                      virtual_node=True).to(device)
         
-    elif args.gnn == 'gine-virtualnode':
-        model1 = GINEModelWithVirtualNode(num_features=input_dim, num_classes=6, num_layers=args.num_layer,
-                                        emb_dim=args.emb_dim, drop_ratio=args.drop_ratio).to(device)
-        model2 = GINEModelWithVirtualNode(num_features=input_dim, num_classes=6, num_layers=args.num_layer,
-                                        emb_dim=args.emb_dim, drop_ratio=args.drop_ratio).to(device)
-
     else:
         raise ValueError("Unsupported GNN type. Supported types: 'gin-virtual', 'gcn-virtual', 'transformer'")
 

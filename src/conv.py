@@ -8,8 +8,6 @@ from torch_geometric.nn import GATv2Conv
 from torch_geometric.utils import softmax
 from torch_geometric.nn import GINEConv
 
-import math
-
 ### GIN convolution along the graph structure
 class GINConv(MessagePassing):
     def __init__(self, emb_dim):
@@ -176,7 +174,6 @@ class GNN_node_Virtualnode(torch.nn.Module):
 
         ### List of GNNs
         self.convs = torch.nn.ModuleList()
-        ### batch norms applied to node embeddings
         self.batch_norms = torch.nn.ModuleList()
 
         ### List of MLPs to transform virtual node at every layer
@@ -266,30 +263,6 @@ class GNN_node_Virtualnode(torch.nn.Module):
 
         return node_representation
 
-from torch.nn import TransformerEncoder, TransformerEncoderLayer
-
-class GraphTransformer(torch.nn.Module):
-    def __init__(self, input_dim, emb_dim, num_heads=4, num_layers=3, dropout=0.1):
-        super().__init__()
-        self.input_proj = torch.nn.Linear(input_dim, emb_dim)
-        encoder_layer = TransformerEncoderLayer(d_model=emb_dim, nhead=num_heads, dropout=dropout, batch_first=True)
-        self.transformer = TransformerEncoder(encoder_layer, num_layers=num_layers)
-        self.emb_dim = emb_dim
-
-    def forward(self, x, batch):
-        # Group nodes by graphs for transformer input
-        max_nodes = max((batch == i).sum().item() for i in batch.unique())
-        padded_x = torch.zeros(batch.max().item() + 1, max_nodes, self.emb_dim, device=x.device)
-
-        for i in range(batch.max().item() + 1):
-            nodes = x[batch == i]
-            padded_x[i, :nodes.size(0), :] = self.input_proj(nodes)
-
-        out = self.transformer(padded_x)
-        mask = (padded_x.sum(dim=2) != 0).float()
-        graph_embeddings = (out * mask.unsqueeze(2)).sum(dim=1) / mask.sum(dim=1, keepdim=True)
-        return graph_embeddings
-
 
 class EdgeAwareGATv2Conv(MessagePassing):
     def __init__(self, in_channels, out_channels, heads=4, concat=True, dropout=0.0):
@@ -330,7 +303,7 @@ class EdgeAwareGATv2Conv(MessagePassing):
         xj_e = x_j + torch.tanh(self.edge_encoder_output_scaler * edge_attr)
         alpha = (x_i * self.att).sum(dim=-1) + (xj_e * self.att).sum(dim=-1)
         alpha = self.leaky_relu(alpha)
-        alpha = softmax(alpha, index)  # <-- this is critical
+        alpha = softmax(alpha, index)
         alpha = F.dropout(alpha, p=self.dropout, training=self.training)
 
         return xj_e * alpha.unsqueeze(-1)

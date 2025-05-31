@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import networkx as nx
 from torch_geometric.utils import to_networkx
-import scipy.sparse.linalg
 
 
 # Updated ContinuousNodeEncoder with proper initialization
