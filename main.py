@@ -76,7 +76,7 @@ def main(args):
     model = model.to(device)
 
     # Load checkpoint model weights
-    if args.start_from_base:
+    if args.start_from_base and args.train_path is not None:
         base_ckpt = os.path.join(script_dir, "checkpoints", "model_base.pth")
         if os.path.exists(base_ckpt):
             state_dict = torch.load(base_ckpt, map_location=device)
