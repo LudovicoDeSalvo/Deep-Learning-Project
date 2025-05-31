@@ -15,6 +15,8 @@ from src.loadData import GraphDataset
 from src.models import GNN
 from src.utils import set_seed
 from torch.optim.lr_scheduler import CosineAnnealingLR
+from util import plot_training_progress
+import logging
 
 
 
@@ -410,6 +412,15 @@ def train_with_soft_co_teaching(args, device, use_adaptive=False, checkpoint_pat
         else:
             patience_counter += 1
             print(f"No improvement. Patience counter: {patience_counter}/{patience}")
+
+        # Logging         
+        if (epoch + 1) % 10 == 0:
+            logging.info(f"Epoch {epoch + 1}/{args.epochs}")            
+            logging.info(f"Train Losses: Model1={loss1:.4f}, Model2={loss2:.4f}")
+            logging.info(f"Train Accuracies: Model1={acc1:.4f}, Model2={acc2:.4f}")            
+            logging.info(f"Val F1: Model1={val_f1_1:.4f}, Model2={val_f1_2:.4f}")
+            if use_adaptive:                
+                logging.info(f"Temperature: {co_teacher.temperature:.4f}")
 
         if patience_counter >= patience:
             print(f"⏹️ Early stopping triggered at epoch {epoch + 1}")

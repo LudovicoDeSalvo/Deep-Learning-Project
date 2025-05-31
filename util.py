@@ -42,7 +42,7 @@ def evaluate(data_loader, model, device, calculate_accuracy=False):
             if has_labels:
                 logits, _ = model(data, return_embedding=True)  # validation mode
             else:
-                logits = model(data, return_embedding=False)     # test mode
+                logits = model(data, return_embedding=True)     # test mode
 
             pred = logits.argmax(dim=1)
             predictions += pred.cpu().tolist()
