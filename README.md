@@ -69,7 +69,10 @@ python3 main.py --test_path datasets/B/0.4_test.json
 
 This will load the best model checkpoint and output predictions to `submission/`.
 
-⚠️ Attention: to do inference up to 67GiB of VRAM are required
+⚠️ Attention: Inference may require up to 67 GiB of VRAM.
+
+To bypass this issue or work with less VRAM, you can train and evaluate the model instead of running direct inference.
+⏳ It will take longer, but it works! 😊
 
 ---
 
