@@ -156,6 +156,29 @@ def get_arguments():
     parser.add_argument('--start_mixup', type=int, default=300)
 
     return parser.parse_args()
+## IF ERROR WHILE RUNNING CODE TRY SETTING UP EVERYTHIONG IN THE MAIN LIKE THIS:
+# def get_arguments():
+#     parser = argparse.ArgumentParser(description="Train or evaluate a GNN model.")
+
+#     parser.add_argument('--train_path', type=str, default='datasets/A/train.json.gz', help='Path to training dataset (set to None for inference only)')
+#     parser.add_argument('--test_path', type=str,  default='datasets/A/test.json.gz', required=False, help='Path to test dataset')
+#     parser.add_argument('--num_checkpoints', type=int, default=5)
+#     parser.add_argument('--device', type=int, default=0)
+#     parser.add_argument('--gnn', type=str, default='gine-virtual', choices=['gin', 'gin-virtual', 'gcn', 'gcn-virtual', 'gine', 'gine-virtual', 'gine-virtualnode'])
+#     parser.add_argument('--drop_ratio', type=float, default=0.1)
+#     parser.add_argument('--num_layer', type=int, default=2)
+#     parser.add_argument('--emb_dim', type=int, default=300) #300 to load base model
+#     parser.add_argument('--batch_size', type=int, default=32)
+#     parser.add_argument('--epochs', type=int, default=80)
+#     parser.add_argument('--baseline_mode', type=int, default=4) #starting loss
+#     parser.add_argument('--noise_prob', type=float, default=0.2)
+#     parser.add_argument('--use_co_teaching', type=bool, default=True, help='Always use soft co-teaching')
+#     parser.add_argument('--switch_epoch', type=int, default=0) #Switches to NCOD+ after this number of epochs
+#     parser.add_argument('--patience', type=int, default=10) #Early Stopping Patience
+#     parser.add_argument('--start_from_base', type=bool, default=True, help='Start from base pretrained model') #Start training from the model trained on all datasets
+#     parser.add_argument('--start_mixup', type=int, default=300)
+
+#     return parser.parse_args()
 
 
 if __name__ == "__main__":
