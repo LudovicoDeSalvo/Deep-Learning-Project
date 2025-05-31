@@ -69,6 +69,8 @@ python3 main.py --test_path datasets/B/0.4_test.json
 
 This will load the best model checkpoint and output predictions to `submission/`.
 
+⚠️ Attention: to do inference up to 67GiB of VRAM are required
+
 ---
 
 ## Repository Structure
@@ -84,3 +86,7 @@ src/
   ├── conv.py         # GNN layers (GIN, GCN, GINE, GAT)
   └── models.py       # Full GNN model with pooling and classification
 ```
+
+## Disclaimer
+
+The logging system was implemented only near the end of the project. While it is functional, logs were not generated throughout the development, except for the final phase specifically for dataset B.

@@ -63,24 +63,14 @@ class GNN(torch.nn.Module):
         else:
             self.graph_pred_linear = torch.nn.Linear(self.emb_dim, self.num_class)
 
-    def forward(self, data, return_embedding=True):
+    def forward(self, data):
         x, edge_index, batch = data.x, data.edge_index, data.batch
 
-        if return_embedding:
-            node_embeddings = self.gnn_node(data, return_embedding=True)
-            graph_embedding = self.pool(node_embeddings, data.batch)
-        else:
-            # Lightweight mode: avoid running full GNN
-            dummy_embedding = torch.zeros(data.num_graphs, self.emb_dim, device=data.x.device)
-            graph_embedding = dummy_embedding
+        node_embeddings = self.gnn_node(data)
+        graph_embedding = self.pool(node_embeddings, batch)
 
         graph_embedding = self.norm(graph_embedding)
         graph_embedding = F.dropout(graph_embedding, p=self.drop_ratio, training=self.training)
+        out = self.graph_pred_linear(graph_embedding)
 
-        logits = self.graph_pred_linear(graph_embedding)
-
-        if return_embedding:
-            return logits, graph_embedding
-        else:
-            return logits
-
+        return out, graph_embedding  # logits, embeddings

@@ -199,11 +199,8 @@ class GNN_node_Virtualnode(torch.nn.Module):
                                                     torch.nn.Linear(2*emb_dim, emb_dim), torch.nn.BatchNorm1d(emb_dim), torch.nn.ReLU()))
 
 
-    def forward(self, batched_data, return_embedding=True):
+    def forward(self, batched_data):
         device = batched_data.edge_index.device
-
-        if not return_embedding:
-            return None
 
         x = batched_data.x.to(device)
         edge_index = batched_data.edge_index.to(device)
@@ -259,16 +256,12 @@ class GNN_node_Virtualnode(torch.nn.Module):
                         training=self.training
                     )
 
-        if not return_embedding:
-            return None  # lightweight mode, do not compute anything
-
         if self.JK == "last":
             node_representation = h_list[-1]
         elif self.JK == "sum":
             node_representation = sum(h_list)
 
         return node_representation
-
 
 
 class EdgeAwareGATv2Conv(MessagePassing):

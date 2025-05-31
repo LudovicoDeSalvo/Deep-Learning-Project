@@ -31,35 +31,29 @@ def evaluate(data_loader, model, device, calculate_accuracy=False):
     true_labels = []
     total_loss = 0
     criterion = torch.nn.CrossEntropyLoss()
-
+    
     with torch.no_grad():
         for data in tqdm(data_loader, desc="Iterating eval graphs", unit="batch"):
             data = data.to(device)
-
-            # Check if ground truth labels exist
-            has_labels = hasattr(data, 'y') and data.y is not None and data.y.numel() > 0
-
-            if has_labels:
-                logits, _ = model(data, return_embedding=True)  # validation mode
-            else:
-                logits = model(data, return_embedding=True)     # test mode
-
+            logits, _ = model(data)  # We only need logits for evaluation
             pred = logits.argmax(dim=1)
-            predictions += pred.cpu().tolist()
+            predictions.extend(pred.cpu().numpy())
 
-            if has_labels:
-                true_labels += data.y.cpu().tolist()
+            # Only collect true labels if they exist
+            if hasattr(data, 'y') and data.y is not None:
+                true_labels.extend(data.y.cpu().numpy())
 
                 if calculate_accuracy:
                     correct += (pred == data.y).sum().item()
                     total += data.y.size(0)
                     total_loss += criterion(logits, data.y).item()
 
+
     if calculate_accuracy and true_labels:
         accuracy = correct / total
         return total_loss / len(data_loader), accuracy, predictions, true_labels
 
-    return None, None, predictions, true_labels
+    return None, None, predictions, true_labels 
 
 
 
