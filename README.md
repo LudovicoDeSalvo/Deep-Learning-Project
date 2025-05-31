@@ -1,8 +1,8 @@
-# 🧠 Robust Graph Neural Networks with Noisy Labels
+# Deep Learning Project
 
 This repository implements a **robust graph classification pipeline** using **Graph Neural Networks (GNNs)**, tailored to **learning from noisy labels**. The system integrates several state-of-the-art methods for label noise robustness and feature encoding.
 
-### ✅ Features
+## Features
 
 - **NCOD+ Loss** with centroid-based regularization and outlier discounting
 - **ELR (Early Learning Regularization)** for robust learning during memorization phase
@@ -16,7 +16,7 @@ This repository implements a **robust graph classification pipeline** using **Gr
 ---
 
 
-### 🔧 Training the Model
+## Training the Model
 
 The main entry point is `main.py`:
 
@@ -26,11 +26,9 @@ python3 main.py --train_path datasets/B/0.4_train.json --test_path datasets/B/0.
 
 For memory reason we used unzipped .json datasets, but the script also accepts .gz files.
 
-### ⚙️ Arguments & Configuration
+### Arguments & Configuration
 
 Key arguments from `get_arguments()`:
-
-### 🔧 Configuration (`args`)
 
 ```python
 args = {
@@ -61,7 +59,7 @@ args = {
 ```
 
 
-### 🧪 Inference Only
+## Inference Only
 
 To disable training and perform inference:
 
@@ -73,7 +71,7 @@ This will load the best model checkpoint and output predictions to `submission/`
 
 ---
 
-## 🗂️ Repository Structure
+## Repository Structure
 
 ```
 main.py               # Entry point for training and evaluation
