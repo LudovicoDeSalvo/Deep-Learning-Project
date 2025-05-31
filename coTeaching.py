@@ -413,6 +413,19 @@ def train_with_soft_co_teaching(args, device, use_adaptive=False, checkpoint_pat
             patience_counter += 1
             print(f"No improvement. Patience counter: {patience_counter}/{patience}")
 
+        # Save intermediate checkpoint inside dataset-specific folder
+        ckpt_folder = os.path.join("checkpoints", os.path.basename(os.path.dirname(args.test_path)))
+        os.makedirs(ckpt_folder, exist_ok=True)
+
+        if epoch % max(1, args.epochs // args.num_checkpoints) == 0:
+            ckpt_file = os.path.join(ckpt_folder, f"epoch_{epoch}.pth")
+            torch.save({
+                'model_state_dict': best_model.state_dict(),
+                'epoch': epoch,
+                'val_f1': val_f1,
+            }, ckpt_file)
+            print(f"💾 Saved checkpoint at {ckpt_file}")
+
         # Logging         
         if (epoch + 1) % 10 == 0:
             logging.info(f"Epoch {epoch + 1}/{args.epochs}")            
