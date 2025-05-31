@@ -423,9 +423,7 @@ def train_with_soft_co_teaching(args, device, use_adaptive=False, checkpoint_pat
                 'epoch': epoch,
                 'val_f1': val_f1,
             }, ckpt_file)
-            print(f"⏹️⏹️⏹️Periodic checkpoint saved at {ckpt_file}")
-
-
+            print(f"Periodic checkpoint saved at {ckpt_file}")
         # Logging         
         if (epoch + 1) % 10 == 0:
             logging.info(f"Epoch {epoch + 1}/{args.epochs}")            
