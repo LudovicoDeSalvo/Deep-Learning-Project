@@ -93,3 +93,6 @@ src/
 ## Disclaimer
 
 The logging system was implemented only near the end of the project. While it is functional, logs were not generated throughout the development, except for the final phase specifically for dataset B.
+
+## Troubleshooting
+If you encounter errors while running the code, try setting up everything in the main function as shown in the commented example in the main section.
