@@ -4,14 +4,14 @@ This repository implements a **robust graph classification pipeline** using **Gr
 
 ### ✅ Features
 
-- ** NCOD+ Loss** with centroid-based regularization and outlier discounting
-- ** ELR (Early Learning Regularization)** for robust learning during memorization phase
-- ** Soft Co-Teaching** with adaptive forget rate and dynamic sample weighting
-- ** GINE Convolutional Layers** with edge features
-- ** MixUp Augmentation** on graph embeddings
-- ** Early Stopping** based on macro-F1 score
-- ** Fine-Tuning** from a base model trained on all datasets
-- ** Enhanced node features** (clustering, closeness, betweenness, Laplacian PE)
+- **NCOD+ Loss** with centroid-based regularization and outlier discounting
+- **ELR (Early Learning Regularization)** for robust learning during memorization phase
+- **Soft Co-Teaching** with adaptive forget rate and dynamic sample weighting
+- **GINE Convolutional Layers** with edge features
+- **MixUp Augmentation** on graph embeddings
+- **Early Stopping** based on macro-F1 score
+- **Fine-Tuning** from a base model trained on all datasets
+- **Enhanced node features** (clustering, closeness, betweenness, Laplacian PE)
 
 ---
 
